@@ -20,6 +20,7 @@ cd PATH/TO/lab1/take-home/ls_command
 mkdir build
 cd build
 cmake ..
+make
 make run_tests
 ```
 
@@ -216,12 +217,13 @@ mkdir build
 cd build
 cmake ..
 make
+make run_tests
 ```
 
-To run tests:
+Or run the test executable directly:
 
 ```bash
-make run_tests
+./ls_test
 ```
 
 Or using CTest:
