@@ -66,7 +66,9 @@ The requests should be processed in the order: `18,13,30,1,17,16`
 - Then it jumps to the beginning and continues in the same direction
 - Unlike C-SCAN, C-LOOK doesn't go all the way to the end of the disk
 
-#### Question 2: V(R) Algorithm
+#### Question 2: V(R) Algorithm (Non-Evaluative - Self Study)
+
+**Note: V(R) implementation is non-evaluative and is provided for self-study purposes only. It will not be graded.**
 
 Add an implementation of the [V(R) algorithm](https://dl.acm.org/doi/pdf/10.1145/7351.8929) to `Disk_Simulator/disk.py`.
 
