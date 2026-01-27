@@ -62,7 +62,8 @@ int main(int argc, char* argv[]) {
     // Test 2: Case-insensitive search
     printf("\n=== Test 2: Case-insensitive search ===\n");
     opts->case_insensitive = true;
-    opts->pattern = "hello";
+    free(opts->pattern);
+    opts->pattern = strdup("hello");
     printf("Pattern: 'hello' (case-insensitive)\n");
     printf("Expected matches: lines 1, 3\n\n");
     
@@ -88,7 +89,8 @@ int main(int argc, char* argv[]) {
     // Test 3: Invert match
     printf("\n=== Test 3: Invert match (-v flag) ===\n");
     opts->invert_match = true;
-    opts->pattern = "test";
+    free(opts->pattern);
+    opts->pattern = strdup("test");
     opts->case_insensitive = false;
     printf("Pattern: 'test' (inverted)\n");
     printf("Expected matches: lines 1, 3, 4, 6 (all lines NOT containing 'test')\n\n");
@@ -116,7 +118,8 @@ int main(int argc, char* argv[]) {
     printf("\n=== Test 4: Search without line numbers ===\n");
     opts->invert_match = false;
     opts->line_number = false;
-    opts->pattern = "test";
+    free(opts->pattern);
+    opts->pattern = strdup("test");
     printf("Pattern: 'test' (no line numbers)\n\n");
     
     result = grep_search_file(opts, test_file);
