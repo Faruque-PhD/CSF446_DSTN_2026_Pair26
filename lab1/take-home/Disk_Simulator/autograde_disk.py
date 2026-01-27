@@ -225,8 +225,8 @@ class TestDiskClass(unittest.TestCase):
         )
 
 
-    def test_case_7(self):
-        # Test Case 7
+    def test_case_5(self):
+        # Test Case 5
         self.addr = "1,90,25,71,61,48,9,36,57,17,70,60,33,90,84,30,109,117,97,56,37,87,107,21,56"
         self.window = 6
         self.numTracks = 10
@@ -283,13 +283,13 @@ class TestDiskClass(unittest.TestCase):
 
         disk.Go()
         fail_message = self.get_fail_message(answer, disk.getBlockStats())
-        self.update_scores("test_case_7", 20, disk.getBlockStats(), answer)
+        self.update_scores("test_case_5", 20, disk.getBlockStats(), answer)
         self.assertEqual(
-            disk.getBlockStats(), answer, "Test Case 7 failed\n" + fail_message
+            disk.getBlockStats(), answer, "Test Case 5 failed\n" + fail_message
         )
 
-    def test_case_8(self):
-        # Test Case 8
+    def test_case_6(self):
+        # Test Case 6
         self.addr = (
             "56,78,79,17,1,44,32,97,82,72,66,79,17,52,19,108,7,98,8,82,40,48,101,2,7"
         )
@@ -349,9 +349,9 @@ class TestDiskClass(unittest.TestCase):
         disk.Go()
         fail_message = self.get_fail_message(answer, disk.getBlockStats())
 
-        self.update_scores("test_case_8", 30, disk.getBlockStats(), answer)
+        self.update_scores("test_case_6", 30, disk.getBlockStats(), answer)
         self.assertEqual(
-            disk.getBlockStats(), answer, "Test Case 8 failed\n" + fail_message
+            disk.getBlockStats(), answer, "Test Case 6 failed\n" + fail_message
         )
 
     # V(R) test cases - NON-EVALUATIVE (self-study only)
@@ -406,8 +406,8 @@ class TestDiskClass(unittest.TestCase):
 # If this script is executed directly, run the tests
 if __name__ == "__main__":
     unittest.main(exit=False)
-    # iterate from 1 to 8 (CLOOK test cases) and if test_case_i is not in scores, add it with 0
-    for i in range(1, 9):
+    # iterate from 1 to 6 (CLOOK test cases) and if test_case_i is not in scores, add it with 0
+    for i in range(1, 7):
         if "test_case_" + str(i) not in scores["scores"]:
             scores["scores"]["test_case_" + str(i)] = 0
     # V(R) test cases are non-evaluative (already set to 0)
