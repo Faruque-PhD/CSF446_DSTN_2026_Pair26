@@ -35,8 +35,8 @@ class TestMyFS(unittest.TestCase):
                     self._read_file(testcase_number, operation['name'], operation['offset'], operation['length'])
                     print(f"Read file: {operation['name']}")
                 elif operation['type'] == 'write':
-                    offset = operation.get('offset')
-                    self._write_file(testcase_number, operation['name'], operation['content'], offset)
+                    # Take-home: append-only; do not pass offset (overwrites are for in-lab).
+                    self._write_file(testcase_number, operation['name'], operation['content'], offset=None)
                     print(f"Wrote to file: {operation['name']}")
                 elif operation['type'] == 'delete':
                     self._delete_file(testcase_number, operation['name'])
