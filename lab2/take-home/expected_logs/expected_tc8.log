@@ -175,21 +175,22 @@ PATH_TO_INODE_MAP:
 /file4.txt: 3
 /file6.txt: 2
 INODE_BITMAP: [0, 1, 1, 1]
-DATA_BLOCK_BITMAP: [1, 1, 1, 1, 0]
+DATA_BLOCK_BITMAP: [1, 1, 1, 1, 1]
 inode0: 
 inode1: file2
 inode2: file6
-inode3: \nfile5gone
+inode3: file4\nfile5gone
 READ /file4.txt
-DATA BLOCK 3: \nfile
-DATA BLOCK 0: 5gone
+DATA BLOCK 3: file4
+DATA BLOCK 0: \nfile
+DATA BLOCK 4: 5gone
 PATH_TO_INODE_MAP:
 /file2.txt: 1
 /file4.txt: 3
 /file6.txt: 2
 INODE_BITMAP: [0, 1, 1, 1]
-DATA_BLOCK_BITMAP: [1, 1, 1, 1, 0]
+DATA_BLOCK_BITMAP: [1, 1, 1, 1, 1]
 inode0: 
 inode1: file2
 inode2: file6
-inode3: \nfile5gone
+inode3: file4\nfile5gone
