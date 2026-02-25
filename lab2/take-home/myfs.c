@@ -308,15 +308,63 @@ static void myfs_fullpath(char fpath[PATH_MAX], const char *path)
 
 	/* TODO: Implement find_free_inode, find_free_data_block, count_free_data_blocks, allocate_blocks_for_append, and g_inode_logical_size. */
 
+static off_t *g_inode_logical_size;
+/* --- helper functions --- */
+static int find_free_inode(void)
+{
+        struct myfs_state *state = MYFS_DATA;
+        int i;
+        for (i = 0; i < state->NUM_INODES; i++) {
+                if (state->inode_bitmap[i] == 0)
+                        return i;
+        }
+        return -1;
+}
+static int find_free_data_block(void)
+{
+        struct myfs_state *state = MYFS_DATA;
+        int i;
+        for (i = 0; i < state->NUM_DATA_BLOCKS; i++) {
+                if (state->data_block_bitmap[i] == 0)
+                        return i;
+        }
+        return -1;
+}
+static int count_free_data_blocks(void)
+{
+        struct myfs_state *state = MYFS_DATA;
+        int i, count = 0;
+        for (i = 0; i < state->NUM_DATA_BLOCKS; i++) {
+                if (state->data_block_bitmap[i] == 0)
+                        count++;
+        }
+        return count;
+}
+
 static int myfs_unlink(const char *path)
 {
 	int res;
 	char fpath[PATH_MAX];
+	struct myfs_state *state = MYFS_DATA;
+        int inode_idx, i, block_idx;
 	myfs_fullpath(fpath, path);
 
 	log_msg("DELETE %s\n", path);
 
 	/* TODO: Lookup inode, free its data blocks, clear inode and path map, reset logical size. */
+	inode_idx = path_to_inode_lookup(state, path);
+        if (inode_idx >= 0) {
+                /* Free all data blocks for this inode */
+                for (i = 0; i < state->inodes[inode_idx]->num_blocks; i++) {
+                        block_idx = state->inodes[inode_idx]->blocks[i];
+                        state->data_block_bitmap[block_idx] = 0;
+                        memset(state->data_blocks[block_idx]->data, 0, (size_t)state->DATA_BLOCK_SIZE);
+                }
+                state->inodes[inode_idx]->num_blocks = 0;
+                state->inode_bitmap[inode_idx] = 0;
+                path_to_inode_remove(state, path);
+                g_inode_logical_size[inode_idx] = 0;
+        }
 
 	res = unlink(fpath);
 	if (res == -1) {
@@ -333,11 +381,29 @@ static int myfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
 	int res;
 	char fpath[PATH_MAX];
+	struct myfs_state *state = MYFS_DATA;
+        int inode_idx, block_idx;
 	myfs_fullpath(fpath, path);
 
 	log_msg("CREATE %s\n", path);
 
 	/* TODO: Find free inode (fail with INODES FULL if none), set bitmap/path map/logical size. */
+
+	inode_idx = find_free_inode();
+        block_idx = find_free_data_block();
+        if (inode_idx == -1 || block_idx == -1) {
+                log_msg("ERROR: INODES FULL\n");
+                log_fuse_context();
+                return -1;
+        }
+        /* Mark inode and data block as allocated */
+        state->inode_bitmap[inode_idx] = 1;
+        state->data_block_bitmap[block_idx] = 1;
+        
+        path_to_inode_add(state, path, inode_idx);
+        g_inode_logical_size[inode_idx] = 0;
+        state->inodes[inode_idx]->num_blocks = 1;
+        state->inodes[inode_idx]->blocks[0] = block_idx;
 
 	res = open(fpath, fi->flags, mode);
 	if (res == -1) {
@@ -357,11 +423,65 @@ static int myfs_read(const char *path, char *buf, size_t size, off_t offset,
 	int fd;
 	ssize_t res;
 	char fpath[PATH_MAX];
+	struct myfs_state *state = MYFS_DATA;
+        int inode_idx, i, block_idx;
+        off_t total_size, read_start, read_end, read_size;
+        off_t block_offset, bytes_in_block, copy_start, copy_len;
+        off_t buf_pos;
 	myfs_fullpath(fpath, path);
 
 	log_msg("READ %s\n", path);
 
 	/* TODO: Lookup inode, use logical size for total_size, log each block, copy from data blocks to buf. */
+
+	inode_idx = path_to_inode_lookup(state, path);
+        if (inode_idx >= 0) {
+                total_size = g_inode_logical_size[inode_idx];
+                /* Compute actual read range */
+                read_start = offset;
+                if (read_start >= total_size) {
+                        log_fuse_context();
+                        return 0;
+                }
+                read_end = offset + (off_t)size;
+                if (read_end > total_size)
+                        read_end = total_size;
+                read_size = read_end - read_start;
+                /* Log data blocks and copy data to buf */
+                buf_pos = 0;
+                block_offset = 0; /* byte offset within the file as we walk blocks */
+                
+                for (i = 0; i < state->inodes[inode_idx]->num_blocks && buf_pos < read_size; i++) {
+                        block_idx = state->inodes[inode_idx]->blocks[i];
+                        bytes_in_block = (off_t)state->DATA_BLOCK_SIZE;
+                        if (block_offset + bytes_in_block > total_size)
+                                bytes_in_block = total_size - block_offset;
+                        /* Check if current block intersects with the read requirement */
+                        if (block_offset + bytes_in_block > read_start && block_offset < read_end) {
+                                /* Log this block if it has meaningful data */
+                                if (bytes_in_block > 0) {
+                                        off_t j;
+                                        log_msg("DATA BLOCK %d: ", block_idx);
+                                        for (j = 0; j < bytes_in_block; j++)
+                                                log_char(state->data_blocks[block_idx]->data[j]);
+                                        log_msg("\n");
+                                }
+                                /* Copy relevant portion to buf */
+                                copy_start = 0;
+                                if (block_offset < read_start)
+                                        copy_start = read_start - block_offset;
+                                copy_len = bytes_in_block - copy_start;
+                                if (buf_pos + copy_len > read_size)
+                                        copy_len = read_size - buf_pos;
+                                        
+                                memcpy(buf + buf_pos, state->data_blocks[block_idx]->data + copy_start, (size_t)copy_len);
+                                buf_pos += copy_len;
+                        }
+                        block_offset += (off_t)state->DATA_BLOCK_SIZE;
+                }
+                log_fuse_context();
+                return (int)read_size;
+        }
 
 	if (fi == NULL)
 		fd = open(fpath, O_RDONLY);
@@ -395,11 +515,71 @@ static int myfs_write(const char *path, const char *buf, size_t size,
 	int fd;
 	ssize_t res;
 	char fpath[PATH_MAX];
+	struct myfs_state *state = MYFS_DATA;
+        int inode_idx, block_idx;
+        size_t bytes_written, space_in_last, to_copy, remaining;
+        int new_blocks_needed, free_blocks;
 	myfs_fullpath(fpath, path);
 
 	log_msg("WRITE %s\n", path);
 
 	/* TODO: Lookup inode; pack (fill last block first), allocate blocks, copy data, update logical size, pwrite. */
+
+	inode_idx = path_to_inode_lookup(state, path);
+        if (inode_idx >= 0) {
+                /* Calculate how much space remains in the last block */
+                space_in_last = 0;
+                if (state->inodes[inode_idx]->num_blocks > 0) {
+                        off_t used_in_last = g_inode_logical_size[inode_idx] % (off_t)state->DATA_BLOCK_SIZE;
+                        if (g_inode_logical_size[inode_idx] == 0) {
+                                space_in_last = (size_t)state->DATA_BLOCK_SIZE;
+                        } else if (used_in_last > 0) {
+                                space_in_last = (size_t)state->DATA_BLOCK_SIZE - (size_t)used_in_last;
+                        }
+                        /* If used_in_last == 0 and size > 0, block is fully utilized; space_in_last remains 0 */
+                }
+                /* Calculate how many new blocks are needed */
+                if (size <= space_in_last) {
+                        new_blocks_needed = 0;
+                } else {
+                        remaining = size - space_in_last;
+                        new_blocks_needed = (int)((remaining + (size_t)state->DATA_BLOCK_SIZE - 1) / (size_t)state->DATA_BLOCK_SIZE);
+                }
+                /* Check if enough free blocks are available */
+                free_blocks = count_free_data_blocks();
+                if (new_blocks_needed > free_blocks) {
+                        log_msg("ERROR: NOT ENOUGH DATA BLOCKS\n");
+                        log_fuse_context();
+                        return -1;
+                }
+                bytes_written = 0;
+                /* Fill space in the last block first */
+                if (space_in_last > 0 && size > 0 && state->inodes[inode_idx]->num_blocks > 0) {
+                        int last_block_idx = state->inodes[inode_idx]->blocks[state->inodes[inode_idx]->num_blocks - 1];
+                        size_t used_in_last = (size_t)(g_inode_logical_size[inode_idx] % (off_t)state->DATA_BLOCK_SIZE);
+                        
+                        to_copy = space_in_last;
+                        if (to_copy > size)
+                                to_copy = size;
+                                
+                        memcpy(state->data_blocks[last_block_idx]->data + used_in_last, buf, to_copy);
+                        bytes_written += to_copy;
+                }
+                /* Allocate new blocks and copy remaining data */
+                while (bytes_written < size) {
+                        block_idx = find_free_data_block();
+                        state->data_block_bitmap[block_idx] = 1;
+                        state->inodes[inode_idx]->blocks[state->inodes[inode_idx]->num_blocks] = block_idx;
+                        state->inodes[inode_idx]->num_blocks++;
+                        to_copy = size - bytes_written;
+                        if (to_copy > (size_t)state->DATA_BLOCK_SIZE)
+                                to_copy = (size_t)state->DATA_BLOCK_SIZE;
+                                
+                        memcpy(state->data_blocks[block_idx]->data, buf + bytes_written, to_copy);
+                        bytes_written += to_copy;
+                }
+                g_inode_logical_size[inode_idx] += (off_t)size;
+        }
 
 	(void)fi;
 	if (fi == NULL)
@@ -437,6 +617,8 @@ static void *myfs_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
 	cfg->attr_timeout = 0;
 	cfg->negative_timeout = 0;
 	/* TODO: Set direct_io and allocate g_inode_logical_size for NUM_INODES. */
+	cfg->direct_io = 1;
+        g_inode_logical_size = (off_t *)calloc((size_t)MYFS_DATA->NUM_INODES, sizeof(off_t));
 	return MYFS_DATA;
 }
 
